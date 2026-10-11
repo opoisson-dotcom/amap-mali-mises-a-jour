@@ -1,0 +1,35 @@
+name: Publier AMAP Mali 1.0.3
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: amap-release-1.0.3
+  cancel-in-progress: false
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Assembler, verifier et publier l installateur
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pieces
+          gh release download v1.0.3 --repo "$GITHUB_REPOSITORY" --pattern 'AMAP-Mali-Windows-1.0.3.part-*' --dir pieces
+          cat pieces/AMAP-Mali-Windows-1.0.3.part-01 pieces/AMAP-Mali-Windows-1.0.3.part-02 pieces/AMAP-Mali-Windows-1.0.3.part-03 > AMAP-Mali-Installation-Windows-1.0.3.exe
+          test "$(stat -c %s AMAP-Mali-Installation-Windows-1.0.3.exe)" = 82576498
+          printf '%s  %s\n' '5024494abd20861afd8c5174d0996a27563973f2aa774a41d9ac5726812fdb05' 'AMAP-Mali-Installation-Windows-1.0.3.exe' | sha256sum --check -
+          gh release upload v1.0.3 AMAP-Mali-Installation-Windows-1.0.3.exe --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit v1.0.3 --repo "$GITHUB_REPOSITORY" --draft=false --latest
+      - name: Retirer uniquement les trois morceaux temporaires
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t ids < <(gh api "repos/$GITHUB_REPOSITORY/releases/409145859/assets" --jq '.[] | select(.name == "AMAP-Mali-Windows-1.0.3.part-01" or .name == "AMAP-Mali-Windows-1.0.3.part-02" or .name == "AMAP-Mali-Windows-1.0.3.part-03") | .id')
+          for assetId in "${ids[@]}"; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$assetId"
+          done
